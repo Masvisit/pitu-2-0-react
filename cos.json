@@ -1,0 +1,13 @@
+
+{
+  "usuari": "alex",
+  "activitat": {
+    "data": "2026-10-12",
+    "esport": "running",
+    "durada_min": 58,
+    "distancia_m": 7400,
+    "fc_mitjana": 171,
+    "fc_maxima": 186
+  },
+  "notes": "cames pesades de l'assaig, he acabat les sèries just"
+}

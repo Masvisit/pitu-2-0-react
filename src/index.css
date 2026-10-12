@@ -1,0 +1,83 @@
+/* Archivo servida des del propi projecte, no des de Google: aixi funciona
+   sense internet i no depen de cap tercer. */
+@import '@fontsource-variable/archivo';
+@import 'tailwindcss';
+
+@theme {
+  /* Base. Off-white fred amb verd a dins, no crema. */
+  --color-paper: #f1f4f2;
+  --color-surface: #ffffff;
+  --color-ink: #101614;
+  --color-ink-soft: #5b6560;
+  --color-ink-faint: #949e99;
+  --color-filet: #e2e7e4;
+
+  /* Verd d'Agents Rurals. */
+  --color-pine: #14532d;
+  --color-pine-soft: #e7f0e9;
+
+  /* Una prova, un to del seu mon fisic. Tots apagats a proposit, perque
+     l'unic color saturat de l'app sigui el senyal de passar o no passar. */
+  --color-cursa: #b45309;    /* tarta */
+  --color-forca: #475569;    /* acer */
+  --color-aigua: #0e7490;    /* aigua fonda */
+  --color-agilitat: #4d7c0f; /* herba */
+  --color-falta: #dc2626;
+
+  --font-sans: 'Archivo Variable', 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* IMPORTANT: res d'estils sense capa. A Tailwind 4 les utilitats viuen a
+   @layer utilities, i qualsevol regla fora de capa les guanya encara que
+   tingui menys especificitat. Un "* { padding: 0 }" aqui deixaria mort
+   cada px-4 de tota l'app. */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background-color: var(--color-paper);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Prou contrast al focus del teclat, sense cridar. */
+  :focus-visible {
+    outline: 2px solid var(--color-pine);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Els numeros que compten no han de ballar d'amplada. */
+  .xifra {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Scroll horitzontal sense barra visible. */
+  .sense-barra::-webkit-scrollbar {
+    display: none;
+  }
+  .sense-barra {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+}
+
+/* El moviment nomes respon a una accio, i qui no el vulgui no el te. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
