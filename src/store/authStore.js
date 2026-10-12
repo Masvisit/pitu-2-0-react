@@ -22,8 +22,8 @@ export const useAuthStore = create((set, get) => ({
       }
     } else {
       const demoUsers = [
-        { id: 'user_1', name: 'Àlex', pin: '1234', color: '#0066cc' },
-        { id: 'user_2', name: 'Anna', pin: '5678', color: '#22c55e' }
+        { id: 'user_1', name: 'Àlex', pin: '1234', color: '#14532d' },
+        { id: 'user_2', name: 'Anna', pin: '5678', color: '#0e7490' }
       ];
       localStorage.setItem('pitu_users', JSON.stringify(demoUsers));
       set({ users: demoUsers });

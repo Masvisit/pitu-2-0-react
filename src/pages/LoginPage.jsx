@@ -1,157 +1,163 @@
-import React, { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { setmanesFinsLesProves } from '../data/wodProgram.js';
+
+const LLARGADA_PIN = 4;
+const TECLES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', null, '0', 'esborra'];
+
+// Els colors surten de la paleta de l'app, no del que hi hagi guardat al
+// navegador: els usuaris de mostra portaven un blau i un verd que
+// desentonen amb la resta.
+const COLORS = ['var(--color-pine)', 'var(--color-aigua)', 'var(--color-cursa)', 'var(--color-agilitat)'];
 
 export default function LoginPage() {
-  const { login, addUser, deleteUser, users } = useAuthStore();
-  const [selectedPin, setSelectedPin] = useState('');
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserPin, setNewUserPin] = useState('');
-  const [selectedColor, setSelectedColor] = useState('#0066cc');
+  const { login, users } = useAuthStore();
+  const [usuari, setUsuari] = useState(null);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
 
-  const colors = [
-    '#0066cc', '#22c55e', '#f59e0b', '#ef4444',
-    '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'
-  ];
+  const prova = useCallback(
+    (codi) => {
+      if (!usuari) return;
+      if (!login(usuari.id, codi)) {
+        setError(true);
+        setTimeout(() => {
+          setPin('');
+          setError(false);
+        }, 600);
+      }
+    },
+    [login, usuari],
+  );
 
-  const handleLogin = (userId) => {
-    if (selectedPin) {
-      login(userId, selectedPin);
-      setSelectedPin('');
-    }
-  };
+  const escriu = useCallback(
+    (xifra) => {
+      if (error) return;
+      setPin((actual) => {
+        if (actual.length >= LLARGADA_PIN) return actual;
+        const nou = actual + xifra;
+        if (nou.length === LLARGADA_PIN) setTimeout(() => prova(nou), 120);
+        return nou;
+      });
+    },
+    [error, prova],
+  );
 
-  const handleCreateUser = () => {
-    if (newUserName && newUserPin) {
-      addUser(newUserName, newUserPin, selectedColor);
-      setNewUserName('');
-      setNewUserPin('');
-      setSelectedColor('#0066cc');
-      setIsCreatingUser(false);
-    }
-  };
+  // Al PC no cal clicar: el teclat de debò també val.
+  useEffect(() => {
+    if (!usuari) return;
+    const alPolsar = (e) => {
+      if (/^[0-9]$/.test(e.key)) escriu(e.key);
+      else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1));
+      else if (e.key === 'Escape') { setUsuari(null); setPin(''); }
+    };
+    window.addEventListener('keydown', alPolsar);
+    return () => window.removeEventListener('keydown', alPolsar);
+  }, [usuari, escriu]);
+
+  const setmanes = setmanesFinsLesProves();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl p-8 max-w-2xl w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">PITU 2.0</h1>
-          <p className="text-gray-600">Agent Rural Training System</p>
-        </div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-paper px-5 py-10">
+      <div className="w-full max-w-sm">
 
-        {!isCreatingUser ? (
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Select User</h2>
-            
-            {users.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-600 mb-4">No users yet. Create one to get started!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {users.map(user => (
-                  <div key={user.id} className="border rounded-lg p-4 hover:shadow-md transition">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg"
-                          style={{ backgroundColor: user.color }}
-                        >
-                          {user.name[0].toUpperCase()}
-                        </div>
-                        <span className="font-semibold text-gray-800">{user.name}</span>
-                      </div>
-                      <button
-                        onClick={() => deleteUser(user.id)}
-                        className="text-red-500 hover:text-red-700 text-sm font-semibold"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                    <input
-                      type="password"
-                      placeholder="Enter PIN"
-                      value={selectedPin}
-                      onChange={(e) => setSelectedPin(e.target.value)}
-                      className="w-full border rounded px-3 py-2 mb-3 text-center text-2xl tracking-widest"
-                      onKeyPress={(e) => e.key === 'Enter' && handleLogin(user.id)}
-                    />
-                    <button
-                      onClick={() => handleLogin(user.id)}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition"
+        <header className="text-center">
+          <h1 className="text-[34px] font-bold leading-none tracking-[-0.03em]">PITU</h1>
+          <p className="xifra mt-2 text-[13px] text-ink-soft">
+            {setmanes} setmanes per a les proves
+          </p>
+        </header>
+
+        {/* ---------- Pas 1: qui ets ---------- */}
+        {!usuari && (
+          <div className="mt-10">
+            <h2 className="text-[15px] font-semibold text-ink-soft">Qui entrena?</h2>
+            <ul className="mt-3 space-y-2">
+              {users.map((u, i) => (
+                <li key={u.id}>
+                  <button
+                    onClick={() => { setUsuari(u); setPin(''); }}
+                    className="flex w-full items-center gap-3.5 rounded-2xl bg-surface px-4 py-3.5 text-left transition-colors hover:bg-pine-soft"
+                  >
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold text-white"
+                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
                     >
-                      Login
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => setIsCreatingUser(true)}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded transition"
-            >
-              + Create New User
-            </button>
+                      {u.name[0].toUpperCase()}
+                    </span>
+                    <span className="text-[16px] font-semibold">{u.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : (
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Create New User</h2>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">Name</label>
-                <input
-                  type="text"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  placeholder="Enter name"
-                  className="w-full border rounded px-4 py-2"
-                />
-              </div>
+        )}
 
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">PIN (4 digits)</label>
-                <input
-                  type="password"
-                  value={newUserPin}
-                  onChange={(e) => setNewUserPin(e.target.value)}
-                  placeholder="0000"
-                  maxLength="4"
-                  className="w-full border rounded px-4 py-2 text-center text-2xl tracking-widest"
-                />
-              </div>
+        {/* ---------- Pas 2: el PIN ---------- */}
+        {usuari && (
+          <div className="mt-10">
+            <button
+              onClick={() => { setUsuari(null); setPin(''); setError(false); }}
+              className="mx-auto flex items-center gap-2 text-[14px] font-semibold text-ink-soft transition-colors hover:text-ink"
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M12.5 4L6.5 10l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {usuari.name}
+            </button>
 
-              <div>
-                <label className="block text-gray-700 font-semibold mb-3">Choose Color</label>
-                <div className="flex gap-2 flex-wrap">
-                  {colors.map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setSelectedColor(color)}
-                      className={`w-10 h-10 rounded-full transition ${
-                        selectedColor === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
+            {/* Quatre punts que es van omplint. */}
+            <div className={`mt-7 flex justify-center gap-3.5 ${error ? 'tremola' : ''}`}>
+              {Array.from({ length: LLARGADA_PIN }, (_, i) => (
+                <span
+                  key={i}
+                  className="h-3.5 w-3.5 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: error
+                      ? 'var(--color-falta)'
+                      : i < pin.length
+                        ? 'var(--color-pine)'
+                        : 'var(--color-filet)',
+                  }}
+                />
+              ))}
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={handleCreateUser}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded transition"
-              >
-                Create User
-              </button>
-              <button
-                onClick={() => setIsCreatingUser(false)}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 rounded transition"
-              >
-                Cancel
-              </button>
+            <p className="mt-3 text-center text-[13px]" aria-live="polite">
+              {error
+                ? <span className="text-falta">PIN incorrecte</span>
+                : <span className="text-ink-faint">Marca el teu PIN</span>}
+            </p>
+
+            {/* Teclat numèric. Al mòbil és l'única manera còmoda. */}
+            <div className="mx-auto mt-6 grid max-w-[264px] grid-cols-3 gap-3">
+              {TECLES.map((t, i) => {
+                if (t === null) return <span key={i} />;
+                if (t === 'esborra') {
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setPin((p) => p.slice(0, -1))}
+                      aria-label="Esborra"
+                      className="grid h-16 place-items-center rounded-2xl text-ink-soft transition-colors active:bg-filet"
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M9 6h10a2 2 0 012 2v8a2 2 0 01-2 2H9l-6-6 6-6z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                        <path d="M12.5 10l4 4M16.5 10l-4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  );
+                }
+                return (
+                  <button
+                    key={i}
+                    onClick={() => escriu(t)}
+                    className="xifra grid h-16 place-items-center rounded-2xl bg-surface text-[24px] font-semibold transition-colors active:bg-pine-soft"
+                  >
+                    {t}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

@@ -72,6 +72,16 @@
   }
 }
 
+/* Un sol moviment a tota l'app: el PIN que no quadra. Respon a una
+   accio teva, que es l'unic cas en que el moviment ajuda. */
+@keyframes tremolor {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.tremola { animation: tremolor 0.45s ease-in-out; }
+
 /* El moviment nomes respon a una accio, i qui no el vulgui no el te. */
 @media (prefers-reduced-motion: reduce) {
   *,
