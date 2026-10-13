@@ -221,9 +221,16 @@ export default function IACoachPage() {
               ))}
             </div>
           ) : (
-            <p className="px-5 py-4 text-[14px] text-ink-soft">
-              No ha deixat cap anàlisi. Torna-ho a provar; si es repeteix, és un error.
-            </p>
+            <div className="px-5 py-4">
+              <p className="text-[14px] leading-relaxed text-ink-soft">
+                {resposta.motiu_aturada === 'max_tokens'
+                  ? "S'ha quedat sense espai a mig escriure. Torna-ho a provar."
+                  : 'No ha deixat cap anàlisi. Torna-ho a provar; si es repeteix, és un error.'}
+              </p>
+              <p className="xifra mt-2 text-[12px] text-ink-faint">
+                motiu: {resposta.motiu_aturada ?? '?'} · eines cridades: {resposta.n_eines ?? 0}
+              </p>
+            </div>
           )}
 
           {resposta.marques?.length > 0 && (

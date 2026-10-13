@@ -333,7 +333,7 @@ async function crida(messages: unknown[], us: Us) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: 3000,
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       tools: einesEnCau,
       messages,
@@ -413,6 +413,10 @@ Deno.serve(async (req) => {
       resposta = await crida(messages, us);
     }
 
+    // Si el model topa amb el sostre de sortida, la crida a l'eina queda
+    // a mig fer i es perd. Val mes dir-ho que tornar una caixa buida.
+    const motiu = resposta.stop_reason ?? null;
+
     const text = (resposta.content ?? [])
       .filter((b: { type: string }) => b.type === 'text')
       .map((b: { text: string }) => b.text).join('\n').trim();
@@ -422,7 +426,10 @@ Deno.serve(async (req) => {
         ok: true,
         // L'analisi de debo surt de l'eina escriu_analisi. El text lliure
         // del model es opcional i sovint no n'hi ha.
-        analisi: res.analisi ?? text ?? null,
+        analisi: res.analisi || text || null,
+        // Diagnostic: per que s'ha aturat i quantes crides a eines ha fet.
+        motiu_aturada: motiu,
+        n_eines: registre.length,
         veredicte: res.veredicte,
         diari: res.diari,
         preguntes: res.preguntes,
