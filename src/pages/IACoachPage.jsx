@@ -218,6 +218,16 @@ export default function IACoachPage() {
               </ul>
             </div>
           )}
+          {typeof resposta.cost_usd === 'number' && (
+            <div className="border-t border-filet px-5 py-2.5">
+              <p className="xifra text-[12px] text-ink-faint">
+                {resposta.cost_usd < 0.01
+                  ? `menys d'un cèntim · ${resposta.model}`
+                  : `${(resposta.cost_usd * 0.92).toFixed(3)} € · ${resposta.model}`}
+                {resposta.us ? ` · ${(resposta.us.entrada + resposta.us.cau_llegit + resposta.us.cau_escrit).toLocaleString('ca')} tokens` : ''}
+              </p>
+            </div>
+          )}
         </section>
       )}
 

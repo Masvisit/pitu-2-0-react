@@ -9,8 +9,18 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 import { SYSTEM_PROMPT, TOOLS } from './prompt.ts';
 import { setmanaISO, validaEvidencia } from './regles.ts';
+import { formataEstat } from './estat.ts';
 
-const MODEL = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-opus-5';
+const MODEL = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-sonnet-5-5';
+
+/** Preus per milio de tokens, per calcular el cost de cada consulta i
+ *  tornar-lo a l'app. Si canvies de model, afegeix-lo aqui. */
+const PREUS: Record<string, { ent: number; sor: number; escriu: number; llegeix: number }> = {
+  'claude-haiku-5-5': { ent: 0.10, sor: 0.50, escriu: 0.125, llegeix: 0.01 },
+  'claude-sonnet-5-5': { ent: 2, sor: 10, escriu: 2.5, llegeix: 0.10 },
+  'claude-opus-5-5': { ent: 4, sor: 20, escriu: 5, llegeix: 0.20 },
+  'claude-opus-5': { ent: 5, sor: 25, escriu: 6.25, llegeix: 0.50 },
+};
 const API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
 const CORS = {
@@ -58,9 +68,9 @@ async function muntaEstat(usuari: string) {
       db.from('sessions').select('data,prova,previst,completada').eq('usuari', usuari)
         .gt('data', fa(0)).lte('data', dins(28)).order('data', { ascending: true }),
       db.from('diari').select('prova,observacio,que_vigila,creat_el').eq('usuari', usuari)
-        .order('creat_el', { ascending: false }).limit(25),
+        .order('creat_el', { ascending: false }).limit(12),
       db.from('preguntes').select('text,per_que,resposta,creat_el').eq('usuari', usuari)
-        .order('creat_el', { ascending: false }).limit(15),
+        .order('creat_el', { ascending: false }).limit(10),
       db.from('ajustos').select('prova,data_sessio,motiu,aplicat_el').eq('usuari', usuari)
         .gte('aplicat_el', fa(30)).order('aplicat_el', { ascending: false }),
       db.from('canvis_pendents').select('abast,motiu,fase,creat_el').eq('usuari', usuari)
@@ -257,7 +267,15 @@ async function executa(
         .lte('data', args.fins as string)
         .order('data', { ascending: true });
       registre.push(`historial demanat (${args.desde} → ${args.fins})`);
-      return JSON.stringify(data ?? []);
+      if (!data?.length) return 'Cap sessio registrada en aquest periode.';
+      // Compacte: el JSON sencer d'aquesta taula es dispara de seguida.
+      return data
+        .map((s: Record<string, any>) =>
+          [s.data, s.prova ?? '-', s.completada ? 'feta' : 'no feta',
+           s.realitzat?.durada_min ? s.realitzat.durada_min + 'min' : '',
+           s.realitzat?.fc_mitjana ? 'fc' + s.realitzat.fc_mitjana : '',
+           s.notes ?? ''].filter(Boolean).join(' | '))
+        .join('\n');
     }
 
     default:
@@ -269,7 +287,18 @@ async function executa(
 // 4. El bucle amb l'API de Claude
 // ---------------------------------------------------------------------
 
-async function crida(messages: unknown[]) {
+/** Suma de tokens de totes les rondes d'una consulta. */
+interface Us { ent: number; sor: number; escriu: number; llegeix: number }
+
+async function crida(messages: unknown[], us: Us) {
+  // El prompt de sistema i les eines no canvien mai: es marquen per a
+  // memoria cau i, a partir de la segona ronda, es cobren a una desena
+  // part. Com que el bucle reenvia tot el context cada ronda, aqui es on
+  // hi havia la despesa que no es veia.
+  const einesEnCau = TOOLS.map((t, i) =>
+    i === TOOLS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t,
+  );
+
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -279,14 +308,28 @@ async function crida(messages: unknown[]) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS,
+      max_tokens: 1500,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      tools: einesEnCau,
       messages,
     }),
   });
   if (!r.ok) throw new Error(`API de Claude ${r.status}: ${await r.text()}`);
-  return await r.json();
+
+  const j = await r.json();
+  const u = j.usage ?? {};
+  us.ent += u.input_tokens ?? 0;
+  us.sor += u.output_tokens ?? 0;
+  us.escriu += u.cache_creation_input_tokens ?? 0;
+  us.llegeix += u.cache_read_input_tokens ?? 0;
+  return j;
+}
+
+/** Cost en dolars d'una consulta sencera. */
+function costDe(us: Us): number {
+  const p = PREUS[MODEL];
+  if (!p) return 0;
+  return (us.ent * p.ent + us.sor * p.sor + us.escriu * p.escriu + us.llegeix * p.llegeix) / 1e6;
 }
 
 Deno.serve(async (req) => {
@@ -300,17 +343,33 @@ Deno.serve(async (req) => {
 
     const estat = await muntaEstat(usuari);
     const registre: string[] = [];
+    const us: Us = { ent: 0, sor: 0, escriu: 0, llegeix: 0 };
+
+    // Text compacte, no JSON: amb els WODs sencers a dins aixo eren
+    // 24.500 tokens per consulta amb la base plena.
+    const document = formataEstat({
+      perfil: estat.perfil,
+      marques: estat.marques_vigents,
+      historial_marques: estat.historial_marques,
+      sessions: estat.sessions_6_setmanes,
+      resum_anterior: estat.resum_anterior,
+      pla: estat.pla_vigent,
+      diari: estat.diari,
+      preguntes: estat.preguntes,
+      ajustos: estat.ajustos_recents,
+      pendents: estat.canvis_pendents,
+    });
 
     const messages: unknown[] = [{
       role: 'user',
       content:
-        `## Document d'estat\n\n${JSON.stringify(estat, null, 1)}\n\n` +
-        `## Activitat nova\n\n${JSON.stringify(activitat ?? null, null, 1)}\n\n` +
-        `## Notes de l'Àlex sobre aquesta sessió\n\n${notes || '(cap)'}\n\n` +
-        `Analitza la sessió. Recorda que el resultat normal és una anàlisi i cap canvi al calendari.`,
+        `${document}\n\n## Activitat nova\n${JSON.stringify(activitat ?? null)}\n\n` +
+        `## Notes seves sobre aquesta sessió\n${notes || '(cap)'}\n\n` +
+        `Analitza-la. El resultat normal és una anàlisi i cap canvi al calendari. ` +
+        `Sigues breu: quatre o cinc frases, amb xifres concretes i sense repetir el que ja sap.`,
     }];
 
-    let resposta = await crida(messages);
+    let resposta = await crida(messages, us);
 
     // Bucle fitat: només hi ha una eina que demani continuar (demana_historic).
     for (let ronda = 0; ronda < 3 && resposta.stop_reason === 'tool_use'; ronda++) {
@@ -323,7 +382,7 @@ Deno.serve(async (req) => {
       if (resultats.length === 0) break;
       messages.push({ role: 'assistant', content: resposta.content });
       messages.push({ role: 'user', content: resultats });
-      resposta = await crida(messages);
+      resposta = await crida(messages, us);
     }
 
     const text = (resposta.content ?? [])
@@ -331,7 +390,16 @@ Deno.serve(async (req) => {
       .map((b: { text: string }) => b.text).join('\n').trim();
 
     return new Response(
-      JSON.stringify({ ok: true, text, accions: registre, model: MODEL }),
+      JSON.stringify({
+        ok: true,
+        text,
+        accions: registre,
+        model: MODEL,
+        // Perque puguis veure el cost de cada consulta sense anar a la
+        // consola d'Anthropic.
+        us: { entrada: us.ent, sortida: us.sor, cau_escrit: us.escriu, cau_llegit: us.llegeix },
+        cost_usd: Number(costDe(us).toFixed(5)),
+      }),
       { headers: { ...CORS, 'content-type': 'application/json' } },
     );
   } catch (e) {
