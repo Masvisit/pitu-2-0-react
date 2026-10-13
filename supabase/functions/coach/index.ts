@@ -118,12 +118,24 @@ async function sessionsReals(usuari: string, dates: string[]): Promise<Set<strin
   return new Set((data ?? []).map((r: { data: string }) => r.data));
 }
 
+/** El que l'app ha de poder ensenyar: ve de les eines, no del text
+ *  lliure del model, que pot no existir. */
+export interface Resultat {
+  analisi: string | null;
+  veredicte: string | null;
+  diari: { prova: string; observacio: string; que_vigila: string }[];
+  preguntes: { text: string; per_que: string }[];
+  marques: { prova: string; valor: number; unitat: string }[];
+  canvis: { abast: string; motiu: string; aplicat: boolean }[];
+}
+
 async function executa(
   nom: string,
   args: Record<string, unknown>,
   usuari: string,
   estat: Awaited<ReturnType<typeof muntaEstat>>,
   registre: string[],
+  res: Resultat,
 ): Promise<string> {
   switch (nom) {
     case 'escriu_analisi': {
@@ -133,6 +145,8 @@ async function executa(
         veredicte: args.veredicte as string,
         text: args.text as string,
       });
+      res.analisi = String(args.text ?? '');
+      res.veredicte = String(args.veredicte ?? '');
       registre.push(`anàlisi escrita (${args.veredicte})`);
       return 'Anàlisi guardada.';
     }
@@ -143,6 +157,11 @@ async function executa(
         prova: (args.prova as string) ?? 'general',
         observacio: args.observacio as string,
         que_vigila: args.que_vigila as string,
+      });
+      res.diari.push({
+        prova: String(args.prova ?? 'general'),
+        observacio: String(args.observacio ?? ''),
+        que_vigila: String(args.que_vigila ?? ''),
       });
       registre.push('anotació al diari');
       return 'Anotat al diari.';
@@ -157,6 +176,9 @@ async function executa(
         unitat: args.unitat as string,
         data: args.data as string,
         origen: args.origen as string,
+      });
+      res.marques.push({
+        prova: String(args.prova), valor: Number(args.valor), unitat: String(args.unitat),
       });
       registre.push(`marca nova: ${args.prova} ${args.valor} ${args.unitat}`);
       return `Marca actualitzada: ${args.prova} = ${args.valor} ${args.unitat}.`;
@@ -203,6 +225,7 @@ async function executa(
         motiu: args.motiu as string,
         evidencia: args.evidencia as string[],
       });
+      res.canvis.push({ abast: `sessió del ${args.data}`, motiu: String(args.motiu ?? ''), aplicat: true });
       registre.push(`sessió del ${args.data} ajustada`);
       return `Aplicat a la sessió del ${args.data}.`;
     }
@@ -245,6 +268,7 @@ async function executa(
         motiu: args.motiu as string,
         evidencia: args.evidencia as string[],
       });
+      res.canvis.push({ abast: String(args.abast), motiu: String(args.motiu ?? ''), aplicat: false });
       registre.push(`canvi de pla proposat (${args.abast}) → pendent d'aprovació`);
       return `Proposta encolada. Queda pendent que l'Àlex l'aprovi; el calendari no s'ha tocat.`;
     }
@@ -255,6 +279,7 @@ async function executa(
         text: args.text as string,
         per_que: args.per_que as string,
       });
+      res.preguntes.push({ text: String(args.text ?? ''), per_que: String(args.per_que ?? '') });
       registre.push('pregunta deixada a l\'app');
       return 'Pregunta deixada a l\'app.';
     }
@@ -344,6 +369,9 @@ Deno.serve(async (req) => {
     const estat = await muntaEstat(usuari);
     const registre: string[] = [];
     const us: Us = { ent: 0, sor: 0, escriu: 0, llegeix: 0 };
+    const res: Resultat = {
+      analisi: null, veredicte: null, diari: [], preguntes: [], marques: [], canvis: [],
+    };
 
     // Text compacte, no JSON: amb els WODs sencers a dins aixo eren
     // 24.500 tokens per consulta amb la base plena.
@@ -376,7 +404,7 @@ Deno.serve(async (req) => {
       const resultats = [];
       for (const bloc of resposta.content) {
         if (bloc.type !== 'tool_use') continue;
-        const sortida = await executa(bloc.name, bloc.input, usuari, estat, registre);
+        const sortida = await executa(bloc.name, bloc.input, usuari, estat, registre, res);
         resultats.push({ type: 'tool_result', tool_use_id: bloc.id, content: sortida });
       }
       if (resultats.length === 0) break;
@@ -392,6 +420,14 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         ok: true,
+        // L'analisi de debo surt de l'eina escriu_analisi. El text lliure
+        // del model es opcional i sovint no n'hi ha.
+        analisi: res.analisi ?? text ?? null,
+        veredicte: res.veredicte,
+        diari: res.diari,
+        preguntes: res.preguntes,
+        marques: res.marques,
+        canvis: res.canvis,
         text,
         accions: registre,
         model: MODEL,

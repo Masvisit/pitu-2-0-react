@@ -196,28 +196,82 @@ export default function IACoachPage() {
       {/* La resposta de l'entrenador. */}
       {resposta && (
         <section className="mt-6 overflow-hidden rounded-2xl bg-surface">
-          <div className="border-b border-filet px-5 py-3.5">
-            <h2 className="text-[15px] font-semibold">L'entrenador diu</h2>
+          <div className="flex items-center gap-2.5 border-b border-filet px-5 py-3.5">
+            <h2 className="text-[15px] font-semibold">L&apos;entrenador diu</h2>
+            {resposta.veredicte && (
+              <span
+                className="ml-auto rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                style={{
+                  color: resposta.veredicte === 'compleix' ? 'var(--color-pine)'
+                    : resposta.veredicte === 'parcial' ? 'var(--color-cursa)' : 'var(--color-falta)',
+                  backgroundColor: resposta.veredicte === 'compleix' ? 'var(--color-pine-soft)' : 'transparent',
+                  border: resposta.veredicte === 'compleix' ? 'none' : '1px solid currentColor',
+                }}
+              >
+                {resposta.veredicte === 'compleix' ? 'Compleix'
+                  : resposta.veredicte === 'parcial' ? 'Compleix a mitges' : 'No compleix'}
+              </span>
+            )}
           </div>
-          {resposta.text && (
+
+          {resposta.analisi ? (
             <div className="px-5 py-4">
-              {resposta.text.split('\n').filter(Boolean).map((p, i) => (
-                <p key={i} className="max-w-[62ch] text-[14.5px] leading-relaxed [&:not(:first-child)]:mt-3">
-                  {p}
+              {resposta.analisi.split('\n').filter(Boolean).map((p, i) => (
+                <p key={i} className="max-w-[62ch] text-[14.5px] leading-relaxed [&:not(:first-child)]:mt-3">{p}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="px-5 py-4 text-[14px] text-ink-soft">
+              No ha deixat cap anàlisi. Torna-ho a provar; si es repeteix, és un error.
+            </p>
+          )}
+
+          {resposta.marques?.length > 0 && (
+            <div className="border-t border-filet bg-pine-soft px-5 py-3.5">
+              <p className="text-[13px] font-semibold text-pine">Marca nova</p>
+              {resposta.marques.map((m, i) => (
+                <p key={i} className="xifra mt-1 text-[14px] text-pine">
+                  {m.prova.replace('_', ' ')}: {m.valor} {m.unitat}
                 </p>
               ))}
             </div>
           )}
-          {resposta.accions?.length > 0 && (
-            <div className="border-t border-filet bg-paper px-5 py-3.5">
-              <p className="text-[13px] text-ink-soft">Què ha fet:</p>
-              <ul className="mt-1.5 space-y-1">
-                {resposta.accions.map((a, i) => (
-                  <li key={i} className="text-[13.5px] font-medium">{a}</li>
-                ))}
-              </ul>
+
+          {resposta.canvis?.length > 0 && (
+            <div className="border-t border-filet px-5 py-3.5">
+              <p className="text-[13px] text-ink-soft">
+                {resposta.canvis.some((c) => c.aplicat) ? 'Ha tocat el pla' : 'Proposa un canvi'}
+              </p>
+              {resposta.canvis.map((c, i) => (
+                <p key={i} className="mt-1 max-w-[60ch] text-[14px] leading-relaxed">
+                  <span className="font-medium">{c.abast}:</span> {c.motiu}
+                </p>
+              ))}
             </div>
           )}
+
+          {resposta.diari?.length > 0 && (
+            <div className="border-t border-filet px-5 py-3.5">
+              <p className="text-[13px] text-ink-soft">Queda sota vigilància</p>
+              {resposta.diari.map((d, i) => (
+                <p key={i} className="mt-1.5 max-w-[60ch] text-[13.5px] leading-relaxed">
+                  {d.observacio} <span className="text-ink-soft">{d.que_vigila}</span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          {resposta.accions?.length > 0 && (
+            <details className="border-t border-filet px-5 py-3">
+              <summary className="cursor-pointer text-[13px] text-ink-faint">Detall del que ha fet</summary>
+              <ul className="mt-2 space-y-1">
+                {resposta.accions.map((a, i) => (
+                  <li key={i} className="text-[13px] text-ink-soft">{a}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+
           {typeof resposta.cost_usd === 'number' && (
             <div className="border-t border-filet px-5 py-2.5">
               <p className="xifra text-[12px] text-ink-faint">
