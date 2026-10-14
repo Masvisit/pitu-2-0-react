@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import FitParser from 'fit-file-parser';
 import { resumFIT } from '../services/fitResum.js';
 import {
@@ -24,7 +24,7 @@ function llegeixFIT(buffer) {
 export default function IACoachPage() {
   const [mode, setMode] = useState('fit'); // fit | manual
   const [fitxer, setFitxer] = useState(null);
-  const [activitat, setActivitat] = useState(null);
+  const [activitatFit, setActivitatFit] = useState(null);
   const [manual, setManual] = useState({
     data: avui(), esport: 'natació', durada_min: '', distancia_m: '',
     fc_mitjana: '', fc_maxima: '',
@@ -55,10 +55,10 @@ export default function IACoachPage() {
       const fit = await llegeixFIT(await f.arrayBuffer());
       const resum = resumFIT(fit);
       if (!resum.data) throw new Error('No he trobat la data dins del fitxer.');
-      setActivitat(resum);
+      setActivitatFit(resum);
       setEstat('repos');
     } catch (e) {
-      setActivitat(null);
+      setActivitatFit(null);
       setError(`No he pogut llegir el fitxer: ${e.message}`);
       setEstat('error');
     }
@@ -72,33 +72,38 @@ export default function IACoachPage() {
   }
 
   function canviaManual(camp, valor) {
-    const m = { ...manual, [camp]: valor };
-    setManual(m);
+    setManual({ ...manual, [camp]: valor });
     setResposta(null);
+  }
 
-    const durada = nombre(m.durada_min);
-    const distancia = nombre(m.distancia_m);
-    if (!m.data || durada === null) { setActivitat(null); return; }
-
-    setActivitat({
-      data: m.data,
+  /** L'activitat manual es calcula del formulari, no es guarda a part: si
+   *  fos estat, no existiria fins que toquessis un camp, i amb la data ja
+   *  posada per defecte podries no tocar-ne cap. */
+  const activitatManual = useMemo(() => {
+    if (!manual.data) return null;
+    const durada = nombre(manual.durada_min);
+    const distancia = nombre(manual.distancia_m);
+    return {
+      data: manual.data,
       hora: null,
-      esport: m.esport || null,
+      esport: manual.esport || null,
       sub_esport: null,
       durada_min: durada,
       distancia_m: distancia,
-      fc_mitjana: nombre(m.fc_mitjana),
-      fc_maxima: nombre(m.fc_maxima),
+      fc_mitjana: nombre(manual.fc_mitjana),
+      fc_maxima: nombre(manual.fc_maxima),
       cadencia_mitjana: null,
       ritme_min_km: distancia && durada ? +(durada / (distancia / 1000)).toFixed(2) : null,
       n_registres: 0,
       origen: 'manual',
-    });
-  }
+    };
+  }, [manual]);
+
+  const activitat = mode === 'fit' ? activitatFit : activitatManual;
 
   function canviaMode(nou) {
     setMode(nou);
-    setActivitat(null);
+    setActivitatFit(null);
     setFitxer(null);
     setResposta(null);
     setError('');
@@ -201,8 +206,9 @@ export default function IACoachPage() {
           <div className="border-b border-filet px-5 py-3.5">
             <h2 className="text-[15px] font-semibold">Què has fet</h2>
             <p className="mt-1 text-[13px] text-ink-soft">
-              Omple el que sàpigues. El que deixis en blanc no s'envia, i
-              l'entrenador no se l'inventa.
+              Només el dia és obligatori. La resta, si ho saps; el que deixis
+              en blanc no s'envia i l'entrenador no se l'inventa. Les sèries
+              van al camp gros de sota.
             </p>
           </div>
 
@@ -276,7 +282,7 @@ export default function IACoachPage() {
 
           {!activitat && (
             <p className="border-t border-filet px-5 py-3 text-[13px] text-ink-faint">
-              Posa com a mínim el dia i els minuts.
+              Posa com a mínim el dia.
             </p>
           )}
         </section>
@@ -316,19 +322,31 @@ export default function IACoachPage() {
       {activitat && (
         <section className="mt-5">
           <label htmlFor="notes" className="text-[15px] font-semibold">
-            Com t'has trobat
+            {mode === 'manual' ? 'Què has fet, sèrie a sèrie' : "Com t'has trobat"}
           </label>
-          <p className="mt-1 text-[13px] text-ink-soft">
-            Energia, dolors, hores de son, si anaves cansat dels castells. Això
-            canvia la lectura més que les xifres.
+          <p className="mt-1 max-w-[58ch] text-[13px] leading-relaxed text-ink-soft">
+            {mode === 'manual'
+              ? "Escriu-ho tal com ho apuntaries en paper. Exercici, sèries, repeticions i pes. I al final, com t'has trobat: energia, dolors, si anaves cansat dels castells."
+              : "Energia, dolors, hores de son, si anaves cansat dels castells. Això canvia la lectura més que les xifres."}
           </p>
           <textarea
             id="notes"
-            rows={3}
+            rows={mode === 'manual' ? 10 : 3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Cames pesades des de l'assaig de dimarts, però he acabat les sèries."
-            className="mt-2.5 w-full resize-y rounded-xl border border-filet bg-surface px-3.5 py-3 text-[14.5px] leading-relaxed placeholder:text-ink-faint"
+            placeholder={mode === 'manual'
+              ? `Press banca
+20x15kg
+20x20kg
+4x 12x40kg
+1 serie en format test: 40 kg, 45 s -> 23 reps
+
+Press inclinat
+3x 12x30kg
+
+Cames pesades de l'assaig, pero he acabat.`
+              : "Cames pesades des de l'assaig de dimarts, però he acabat les sèries."}
+            className="mt-2.5 w-full resize-y rounded-xl border border-filet bg-surface px-3.5 py-3 font-mono text-[14px] leading-relaxed placeholder:text-ink-faint sm:font-sans sm:text-[14.5px]"
           />
           <button
             onClick={envia}
