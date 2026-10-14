@@ -22,8 +22,13 @@ function llegeixFIT(buffer) {
 }
 
 export default function IACoachPage() {
+  const [mode, setMode] = useState('fit'); // fit | manual
   const [fitxer, setFitxer] = useState(null);
   const [activitat, setActivitat] = useState(null);
+  const [manual, setManual] = useState({
+    data: avui(), esport: 'natació', durada_min: '', distancia_m: '',
+    fc_mitjana: '', fc_maxima: '',
+  });
   const [notes, setNotes] = useState('');
   const [estat, setEstat] = useState('repos'); // repos | llegint | enviant | fet | error
   const [error, setError] = useState('');
@@ -59,6 +64,46 @@ export default function IACoachPage() {
     }
   }
 
+  /** Els camps buits han de ser null, no zero: un zero inventat enganya
+   *  l'entrenador tant com una xifra falsa. */
+  function nombre(v) {
+    const n = Number(String(v).replace(',', '.'));
+    return Number.isFinite(n) && String(v).trim() !== '' ? n : null;
+  }
+
+  function canviaManual(camp, valor) {
+    const m = { ...manual, [camp]: valor };
+    setManual(m);
+    setResposta(null);
+
+    const durada = nombre(m.durada_min);
+    const distancia = nombre(m.distancia_m);
+    if (!m.data || durada === null) { setActivitat(null); return; }
+
+    setActivitat({
+      data: m.data,
+      hora: null,
+      esport: m.esport || null,
+      sub_esport: null,
+      durada_min: durada,
+      distancia_m: distancia,
+      fc_mitjana: nombre(m.fc_mitjana),
+      fc_maxima: nombre(m.fc_maxima),
+      cadencia_mitjana: null,
+      ritme_min_km: distancia && durada ? +(durada / (distancia / 1000)).toFixed(2) : null,
+      n_registres: 0,
+      origen: 'manual',
+    });
+  }
+
+  function canviaMode(nou) {
+    setMode(nou);
+    setActivitat(null);
+    setFitxer(null);
+    setResposta(null);
+    setError('');
+  }
+
   async function envia() {
     if (!activitat) return;
     setEstat('enviant');
@@ -71,7 +116,7 @@ export default function IACoachPage() {
         previst: previst.wod ?? {},
         realitzat: activitat,
         notes,
-        fitxer_fit: fitxer?.name ?? null,
+        fitxer_fit: mode === 'fit' ? (fitxer?.name ?? null) : null,
       });
       const r = await analitzaSessio('alex', activitat, notes);
       if (!r?.ok) throw new Error(r?.error ?? 'La funció no ha respost.');
@@ -90,8 +135,9 @@ export default function IACoachPage() {
     <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-5 sm:px-6">
       <h1 className="text-[22px] font-bold">Puja l'entrenament</h1>
       <p className="mt-1.5 max-w-[58ch] text-[14px] leading-relaxed text-ink-soft">
-        El fitxer es llegeix aquí al navegador i només se n'envia el resum.
-        L'entrenador l'analitza i, si cal, ajusta el pla.
+        Amb rellotge, puja el .FIT: es llegeix aquí al navegador i només
+        se n'envia el resum. Sense rellotge, escriu-la a mà. L'entrenador
+        l'analitza igual i, si cal, ajusta el pla.
       </p>
 
       {!hiHaSupabase && (
@@ -102,7 +148,25 @@ export default function IACoachPage() {
         </p>
       )}
 
+      {/* Dues maneres d'entrar la sessió. Els dies que no portis rellotge,
+          l'app ha de servir igual. */}
+      <div className="mt-5 flex gap-1 rounded-full bg-filet/60 p-1">
+        {[['fit', 'Puja un .FIT'], ['manual', 'Escriu-la a mà']].map(([id, text]) => (
+          <button
+            key={id}
+            onClick={() => canviaMode(id)}
+            aria-pressed={mode === id}
+            className={`flex-1 rounded-full py-2.5 text-[14px] font-semibold transition-colors ${
+              mode === id ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(16,22,20,0.08)]' : 'text-ink-soft'
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+
       {/* Zona de pujada. Vorera discontínua, no targeta: s'ha de veure que és un buit per omplir. */}
+      {mode === 'fit' && (
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); trien(e.dataTransfer.files?.[0]); }}
@@ -128,9 +192,98 @@ export default function IACoachPage() {
           Tria un fitxer
         </button>
       </div>
+      )}
+
+      {/* Entrada manual. Produeix exactament la mateixa forma de dades que
+          el lector de FIT, així que a partir d'aquí tot el camí és el mateix. */}
+      {mode === 'manual' && (
+        <section className="mt-5 overflow-hidden rounded-2xl bg-surface">
+          <div className="border-b border-filet px-5 py-3.5">
+            <h2 className="text-[15px] font-semibold">Què has fet</h2>
+            <p className="mt-1 text-[13px] text-ink-soft">
+              Omple el que sàpigues. El que deixis en blanc no s'envia, i
+              l'entrenador no se l'inventa.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 px-5 py-4">
+            <label className="col-span-2 sm:col-span-1">
+              <span className="block text-[13px] text-ink-soft">Dia</span>
+              <input
+                type="date"
+                value={manual.data}
+                onChange={(e) => canviaManual('data', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+              />
+            </label>
+
+            <label className="col-span-2 sm:col-span-1">
+              <span className="block text-[13px] text-ink-soft">Què</span>
+              <select
+                value={manual.esport}
+                onChange={(e) => canviaManual('esport', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet bg-surface px-3 py-2.5 text-[15px]"
+              >
+                <option value="natació">Natació</option>
+                <option value="cursa">Cursa</option>
+                <option value="press banca">Press banca</option>
+                <option value="circuit">Circuit</option>
+                <option value="castells">Castells</option>
+                <option value="altra">Altra</option>
+              </select>
+            </label>
+
+            <label>
+              <span className="block text-[13px] text-ink-soft">Minuts</span>
+              <input
+                type="number" inputMode="numeric" min="1" placeholder="55"
+                value={manual.durada_min}
+                onChange={(e) => canviaManual('durada_min', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+              />
+            </label>
+
+            <label>
+              <span className="block text-[13px] text-ink-soft">Metres</span>
+              <input
+                type="number" inputMode="numeric" min="0" placeholder="1200"
+                value={manual.distancia_m}
+                onChange={(e) => canviaManual('distancia_m', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+              />
+            </label>
+
+            <label>
+              <span className="block text-[13px] text-ink-soft">FC mitjana</span>
+              <input
+                type="number" inputMode="numeric" min="0" placeholder="—"
+                value={manual.fc_mitjana}
+                onChange={(e) => canviaManual('fc_mitjana', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+              />
+            </label>
+
+            <label>
+              <span className="block text-[13px] text-ink-soft">FC màxima</span>
+              <input
+                type="number" inputMode="numeric" min="0" placeholder="—"
+                value={manual.fc_maxima}
+                onChange={(e) => canviaManual('fc_maxima', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+              />
+            </label>
+          </div>
+
+          {!activitat && (
+            <p className="border-t border-filet px-5 py-3 text-[13px] text-ink-faint">
+              Posa com a mínim el dia i els minuts.
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Què ha sortit del fitxer. Sense inventar res: si no hi és, no es mostra. */}
-      {activitat && (
+      {mode === 'fit' && activitat && (
         <section className="mt-5 overflow-hidden rounded-2xl bg-surface">
           <div className="border-b border-filet px-5 py-3.5">
             <h2 className="text-[15px] font-semibold">Això és el que diu el fitxer</h2>
