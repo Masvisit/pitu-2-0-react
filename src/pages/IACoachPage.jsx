@@ -3,7 +3,7 @@ import FitParser from 'fit-file-parser';
 import { resumFIT } from '../services/fitResum.js';
 import {
   analitzaSessio, guardaSessio, canvisPendents, resolCanvi,
-  preguntesObertes, responPregunta, hiHaSupabase,
+  preguntesObertes, responPregunta, hiHaSupabase, ultimesMetriques,
 } from '../services/coach.js';
 import { getWODForDate, avui } from '../data/wodProgram.js';
 import { PROVES } from '../data/agentRuralExercises.js';
@@ -21,6 +21,15 @@ function llegeixFIT(buffer) {
   });
 }
 
+/** "fa 6 dies", perque es vegi d'un cop d'ull si estan passats. */
+function diesDes(iso) {
+  const d = Math.round((Date.now() - new Date(iso + 'T00:00:00Z').getTime()) / 86400000);
+  if (d <= 0) return 'Avui mateix.';
+  if (d === 1) return 'Fa un dia.';
+  if (d < 10) return `Fa ${d} dies.`;
+  return `Fa ${d} dies, ja toca actualitzar-los.`;
+}
+
 export default function IACoachPage() {
   const [mode, setMode] = useState('fit'); // fit | manual
   const [fitxer, setFitxer] = useState(null);
@@ -36,6 +45,8 @@ export default function IACoachPage() {
   const [pendents, setPendents] = useState([]);
   const [preguntes, setPreguntes] = useState([]);
   const [respostes, setRespostes] = useState({});
+  const [metriques, setMetriques] = useState({ vo2max: '', running_index: '', carrega: '' });
+  const [ultimes, setUltimes] = useState(null);
   const inputRef = useRef(null);
 
   const recarregaPendents = async () => {
@@ -44,6 +55,7 @@ export default function IACoachPage() {
   };
 
   useEffect(() => { recarregaPendents(); }, []);
+  useEffect(() => { ultimesMetriques('alex').then(setUltimes); }, []);
 
   async function trien(f) {
     if (!f) return;
@@ -119,11 +131,22 @@ export default function IACoachPage() {
         data: activitat.data,
         prova: previst.prova,
         previst: previst.wod ?? {},
-        realitzat: activitat,
+        realitzat: {
+          ...activitat,
+          vo2max: nombre(metriques.vo2max),
+          running_index: nombre(metriques.running_index),
+          carrega: nombre(metriques.carrega),
+        },
         notes,
         fitxer_fit: mode === 'fit' ? (fitxer?.name ?? null) : null,
       });
-      const r = await analitzaSessio('alex', activitat, notes);
+      const ambMetriques = {
+        ...activitat,
+        vo2max: nombre(metriques.vo2max),
+        running_index: nombre(metriques.running_index),
+        carrega: nombre(metriques.carrega),
+      };
+      const r = await analitzaSessio('alex', ambMetriques, notes);
       if (!r?.ok) throw new Error(r?.error ?? 'La funció no ha respost.');
       setResposta(r);
       setEstat('fet');
@@ -316,6 +339,42 @@ export default function IACoachPage() {
               compararà què tocava amb què has fet.
             </p>
           )}
+        </section>
+      )}
+
+      {/* Tres xifres del rellotge que no surten del FIT i que es mouen poc.
+          Buides per defecte: mai s'arrossega un valor vell. */}
+      {activitat && (
+        <section className="mt-5 overflow-hidden rounded-2xl bg-surface">
+          <div className="border-b border-filet px-5 py-3.5">
+            <h2 className="text-[15px] font-semibold">Del rellotge, si els tens a mà</h2>
+            <p className="mt-1 text-[13px] text-ink-soft">
+              {ultimes
+                ? `Els vas apuntar per última vegada el ${ultimes.data}. ${diesDes(ultimes.data)}`
+                : 'Encara no n\'has apuntat cap.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 px-5 py-4">
+            {[
+              ['vo2max', 'VO2max', ultimes?.vo2max],
+              ['running_index', 'Running index', ultimes?.running_index],
+              ['carrega', 'Càrrega', ultimes?.carrega],
+            ].map(([clau, etiqueta, previ]) => (
+              <label key={clau}>
+                <span className="block text-[13px] text-ink-soft">{etiqueta}</span>
+                <input
+                  type="number" inputMode="numeric"
+                  placeholder={previ != null ? String(previ) : '—'}
+                  value={metriques[clau]}
+                  onChange={(e) => setMetriques({ ...metriques, [clau]: e.target.value })}
+                  className="xifra mt-1 w-full rounded-xl border border-filet px-3 py-2.5 text-[15px]"
+                />
+                {previ != null && (
+                  <span className="mt-1 block text-[11.5px] text-ink-faint">última: {previ}</span>
+                )}
+              </label>
+            ))}
+          </div>
         </section>
       )}
 

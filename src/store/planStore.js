@@ -1,24 +1,24 @@
 // =====================================================================
 // PITU 2.0 · Estat del pla
 //
-// El pla es calcula (wodProgram), les marques i el que has fet de debo
-// venen de Supabase. Aquest store els ajunta: si l'entrenador ha ajustat
-// un dia concret, el seu "previst" mana per sobre del WOD generat.
+// El pla es calcula (wodProgram), no es desa. El que sí que es desa és
+// el que se n'aparta: les excepcions (dies moguts o trets) i les
+// sessions que has fet de debò.
 //
 // Sense .env.local l'app funciona igual, amb el pla generat i les
 // marques de partida.
 // =====================================================================
 
 import { create } from 'zustand';
-import { avui, dillunsDe, getSetmana, sumaDies, MARQUES_INICIALS } from '../data/wodProgram.js';
-import { hiHaSupabase, marquesVigents, sessionsDeLaSetmana } from '../services/coach.js';
+import { avui, dillunsDe, getSetmana, getWODForDate, sumaDies, MARQUES_INICIALS } from '../data/wodProgram.js';
+import {
+  hiHaSupabase, marquesVigents, sessionsDeLaSetmana,
+  excepcionsPla, desaExcepcio, esborraExcepcio,
+} from '../services/coach.js';
 
-/** Les files de marques de Supabase, en el format que fa servir el pla. */
 function aMarques(files) {
   const m = { ...MARQUES_INICIALS };
-  for (const f of files ?? []) {
-    m[f.prova] = { valor: Number(f.valor), data: f.data };
-  }
+  for (const f of files ?? []) m[f.prova] = { valor: Number(f.valor), data: f.data };
   return m;
 }
 
@@ -27,41 +27,55 @@ export const usePlanStore = create((set, get) => ({
   carregant: false,
   errorCarrega: null,
 
-  /** Dilluns de la setmana que s'esta mirant. */
   setmanaVista: dillunsDe(avui()),
-
   marques: MARQUES_INICIALS,
 
-  /** Files de la taula sessions, indexades per data. */
+  /** Sessions fetes, agrupades per data: una data pot tenir-ne diverses. */
   sessions: {},
 
-  /** Els set dies de la setmana vista, amb el WOD ja resolt. */
+  /** Excepcions al pla, indexades per data. */
+  excepcions: {},
+
+  /**
+   * Què toca un dia, després d'aplicar les excepcions.
+   * Sense excepció, el que digui el càlcul.
+   */
+  resol: (iso) => {
+    const generat = getWODForDate(iso);
+    const e = get().excepcions[iso];
+    if (!e) return generat;
+    if (e.estat === 'eliminat') {
+      return { ...generat, prova: null, wod: null, sauna: null, tret: true };
+    }
+    return {
+      ...generat,
+      prova: e.prova ?? generat.prova,
+      wod: e.wod ?? generat.wod,
+      mogut_de: e.origen ?? null,
+      // Sense origen vol dir que no ve d'enlloc: l'ha ajustat l'entrenador.
+      ajustat: !e.origen,
+    };
+  },
+
+  /** Els set dies de la setmana vista, amb excepcions i sessions fetes. */
   dies: () => {
-    const { setmanaVista, sessions } = get();
-    return getSetmana(setmanaVista).map((d) => {
-      const fila = sessions[d.data];
-      if (!fila) return d;
-      // Un "previst" no buit vol dir que l'entrenador ha ajustat el dia.
-      const ajustat = fila.previst && Object.keys(fila.previst).length > 0;
+    const { sessions, resol } = get();
+    return getSetmana(get().setmanaVista).map((d) => {
+      const base = resol(d.data);
+      const fetes = sessions[d.data] ?? [];
       return {
-        ...d,
-        completada: Boolean(fila.completada),
-        realitzat: fila.realitzat ?? null,
-        notes: fila.notes ?? '',
-        ajustat,
-        wod: ajustat ? { ...d.wod, ...fila.previst } : d.wod,
+        ...base,
+        fetes,
+        completada: fetes.some((f) => f.completada),
+        notes: fetes.map((f) => f.notes).filter(Boolean).join(' · '),
       };
     });
   },
 
-  /** El dia d'avui, amb tot el que se'n sap. */
-  avuiResolt: () => {
-    const d = get().dies().find((x) => x.data === avui());
-    return d ?? getSetmana(avui()).find((x) => x.data === avui());
-  },
+  avuiResolt: () => get().dies().find((x) => x.data === avui()) ?? getWODForDate(avui()),
 
-  canviaSetmana: (saltSetmanes) => {
-    set({ setmanaVista: sumaDies(get().setmanaVista, saltSetmanes * 7) });
+  canviaSetmana: (salt) => {
+    set({ setmanaVista: sumaDies(get().setmanaVista, salt * 7) });
     get().carrega();
   },
 
@@ -75,15 +89,51 @@ export const usePlanStore = create((set, get) => ({
     set({ carregant: true, errorCarrega: null });
     try {
       const dl = get().setmanaVista;
-      const [files, marq] = await Promise.all([
-        sessionsDeLaSetmana(usuari, dl, sumaDies(dl, 6)),
+      const diumenge = sumaDies(dl, 6);
+      const [files, marq, exc] = await Promise.all([
+        sessionsDeLaSetmana(usuari, dl, diumenge),
         marquesVigents(usuari),
+        excepcionsPla(usuari, dl, diumenge),
       ]);
       const perData = {};
-      for (const f of files) perData[f.data] = f;
-      set({ sessions: perData, marques: aMarques(marq), carregant: false });
+      for (const f of files) (perData[f.data] ??= []).push(f);
+      set({ sessions: perData, marques: aMarques(marq), excepcions: exc, carregant: false });
     } catch (e) {
       set({ carregant: false, errorCarrega: String(e.message ?? e) });
     }
+  },
+
+  // -------------------------------------------------------------------
+  // Moure, treure i restaurar
+  // -------------------------------------------------------------------
+
+  /**
+   * Mou el que toca el dia `origen` al dia `desti`.
+   * Si el destí ja té feina, se les intercanvia: així la setmana manté
+   * la mateixa càrrega total, que és el que té sentit en un pla.
+   */
+  mou: async (origen, desti, usuari = 'alex') => {
+    if (origen === desti) return;
+    const a = get().resol(origen);
+    const b = get().resol(desti);
+
+    if (b.wod && !b.tret) {
+      await desaExcepcio(usuari, desti, { estat: 'substituit', prova: a.prova, wod: a.wod, origen });
+      await desaExcepcio(usuari, origen, { estat: 'substituit', prova: b.prova, wod: b.wod, origen: desti });
+    } else {
+      await desaExcepcio(usuari, desti, { estat: 'substituit', prova: a.prova, wod: a.wod, origen });
+      await desaExcepcio(usuari, origen, { estat: 'eliminat' });
+    }
+    await get().carrega(usuari);
+  },
+
+  treu: async (data, usuari = 'alex') => {
+    await desaExcepcio(usuari, data, { estat: 'eliminat' });
+    await get().carrega(usuari);
+  },
+
+  restaura: async (data, usuari = 'alex') => {
+    await esborraExcepcio(usuari, data);
+    await get().carrega(usuari);
   },
 }));

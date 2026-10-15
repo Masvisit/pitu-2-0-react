@@ -55,7 +55,7 @@ function dins(dies: number): string {
 // ---------------------------------------------------------------------
 
 async function muntaEstat(usuari: string) {
-  const [perfil, marques, histMarques, recents, antigues, pla, diari, preguntes, ajustos, pendents] =
+  const [perfil, marques, histMarques, recents, antigues, pla, diari, preguntes, ajustos, pendents, excepcions] =
     await Promise.all([
       db.from('perfil').select('*').eq('usuari', usuari).maybeSingle(),
       db.from('v_marca_vigent').select('*').eq('usuari', usuari),
@@ -75,6 +75,8 @@ async function muntaEstat(usuari: string) {
         .gte('aplicat_el', fa(30)).order('aplicat_el', { ascending: false }),
       db.from('canvis_pendents').select('abast,motiu,fase,creat_el').eq('usuari', usuari)
         .eq('estat', 'pendent'),
+      db.from('pla_excepcions').select('data,estat,prova,wod,origen').eq('usuari', usuari)
+        .gte('data', fa(14)).lte('data', dins(28)).order('data', { ascending: true }),
     ]);
 
   // Tot el que és més antic de sis setmanes, comprimit a agregats setmanals.
@@ -101,6 +103,7 @@ async function muntaEstat(usuari: string) {
     preguntes: preguntes.data ?? [],
     ajustos_recents: ajustos.data ?? [],
     canvis_pendents: pendents.data ?? [],
+    excepcions: excepcions.data ?? [],
   };
 }
 
@@ -212,9 +215,16 @@ async function executa(
         return `AJORNAT. Ja hi ha un ajust de ${args.prova} del ${previ.aplicat_el.slice(0, 10)}, i el límit és un cada catorze dies. Anotat al diari.`;
       }
 
-      const { error } = await db.from('sessions')
-        .update({ previst: args.canvis, actualitzat_el: new Date().toISOString() })
-        .eq('usuari', usuari).eq('data', args.data as string);
+      // El pla no es desa: es calcula a la data. Un ajust es una excepcio
+      // al calcul. Abans aixo feia un update sobre una fila que no existia
+      // i no tocava res, i l'ajust es perdia sense dir-ho.
+      const { error } = await db.from('pla_excepcions').upsert({
+        usuari,
+        data: args.data as string,
+        estat: 'substituit',
+        prova: args.prova as string,
+        wod: args.canvis,
+      }, { onConflict: 'usuari,data' });
       if (error) return `No s'ha pogut aplicar: ${error.message}`;
 
       await db.from('ajustos').insert({
@@ -386,6 +396,7 @@ Deno.serve(async (req) => {
       preguntes: estat.preguntes,
       ajustos: estat.ajustos_recents,
       pendents: estat.canvis_pendents,
+      excepcions: estat.excepcions,
     });
 
     const messages: unknown[] = [{

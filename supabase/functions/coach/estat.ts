@@ -23,6 +23,7 @@ export interface Dades {
   preguntes: Fila[];
   ajustos: Fila[];
   pendents: Fila[];
+  excepcions?: Fila[];
 }
 
 const MINIMS: Record<string, { minim: number; unitat: string; mesEsMillor: boolean }> = {
@@ -42,6 +43,23 @@ function fet(r: Fila | null): string {
   if (r.fc_mitjana) t.push(`fc${r.fc_mitjana}${r.fc_maxima ? '/' + r.fc_maxima : ''}`);
   if (r.ritme_min_km) t.push(`${r.ritme_min_km}min/km`);
   return t.length ? t.join(' ') : '—';
+}
+
+/** Els parcials, en una linia. Es on es veu si va acabar sobrat o fos:
+ *  amb nomes la mitjana, una sessio ben feta i una de mal feta son
+ *  indistingibles. */
+function parcials(r: Fila | null): string | null {
+  const p = r?.parcials;
+  if (!Array.isArray(p) || p.length === 0) return null;
+  const trams = p.map((x: Fila) => {
+    const t = [x.distancia_m ? `${x.distancia_m}m` : null, x.ritme_min_km, x.fc ? `fc${x.fc}` : null]
+      .filter(Boolean).join(' ');
+    return `${x.n}) ${t}`;
+  }).join(' · ');
+  const deriva = typeof r?.deriva_fc === 'number'
+    ? ` · deriva ${r.deriva_fc > 0 ? '+' : ''}${r.deriva_fc} ppm del primer al darrer terç`
+    : '';
+  return `   parcials: ${trams}${deriva}`;
 }
 
 /** Del WOD previst nomes el nom: el detall el genera l'app, no cal enviar-lo. */
@@ -98,6 +116,26 @@ export function formataEstat(d: Dades): string {
         [s.data, s.prova ?? '—', previst(s.previst), fet(s.realitzat),
          s.completada ? '' : '(no completada)', s.notes ?? ''].filter(Boolean).join(' | '),
       );
+      const pl = parcials(s.realitzat);
+      if (pl) b.push(pl);
+    }
+  }
+
+  // VO2max, running index i carrega: no surten del FIT, els apunta ell a
+  // ma del rellotge. Van amb data perque el que informa es la tendencia.
+  const ambMetriques = d.sessions
+    .filter((s) => s.realitzat?.vo2max || s.realitzat?.running_index || s.realitzat?.carrega)
+    .slice(-4).reverse();
+  if (ambMetriques.length) {
+    b.push('', '## Xifres del rellotge');
+    for (const s of ambMetriques) {
+      const r = s.realitzat;
+      b.push([
+        s.data,
+        r.vo2max ? `VO2max ${r.vo2max}` : null,
+        r.running_index ? `running index ${r.running_index}` : null,
+        r.carrega ? `càrrega ${r.carrega}` : null,
+      ].filter(Boolean).join(' · '));
     }
   }
 
@@ -127,6 +165,15 @@ export function formataEstat(d: Dades): string {
   if (d.pendents.length) {
     b.push('', '## Canvis grans pendents que ha d`aprovar');
     for (const c of d.pendents) b.push(`${c.abast}: ${c.motiu}`);
+  }
+
+  // Dies que l'Alex ha mogut o tret, o que tu mateix has ajustat.
+  if (d.excepcions?.length) {
+    b.push('', '## Dies que no segueixen el pla');
+    for (const e of d.excepcions) {
+      if (e.estat === 'eliminat') b.push(`${e.data}: tret del pla`);
+      else b.push(`${e.data}: ${e.wod?.nom ?? e.prova ?? 'canviat'}${e.origen ? ` (mogut des del ${e.origen})` : ''}`);
+    }
   }
 
   const obertes = d.preguntes.filter((q) => !q.resposta);

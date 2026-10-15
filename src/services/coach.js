@@ -66,6 +66,61 @@ export async function analisiDelDia(usuari, data) {
   return files?.[0] ?? null;
 }
 
+/**
+ * L'últim VO2max, running index i càrrega que vas apuntar, i quan.
+ * Serveix per ensenyar-te "última: 53 · fa 6 dies" i que no se t'oblidi
+ * actualitzar-los, sense que l'app arrossegui mai un valor vell fent-lo
+ * passar per nou.
+ */
+export async function ultimesMetriques(usuari) {
+  if (!hiHaSupabase) return null;
+  const { data } = await supabase.from('sessions').select('data, realitzat')
+    .eq('usuari', usuari).order('data', { ascending: false }).limit(40);
+  for (const fila of data ?? []) {
+    const r = fila.realitzat ?? {};
+    if (r.vo2max || r.running_index || r.carrega) {
+      return {
+        data: fila.data,
+        vo2max: r.vo2max ?? null,
+        running_index: r.running_index ?? null,
+        carrega: r.carrega ?? null,
+      };
+    }
+  }
+  return null;
+}
+
+/** Totes les sessions desades d'un dia. Ara en poden ser diverses. */
+export async function sessionsDelDia(usuari, data) {
+  if (!hiHaSupabase) return [];
+  const { data: files } = await supabase.from('sessions').select('*')
+    .eq('usuari', usuari).eq('data', data).order('id', { ascending: true });
+  return files ?? [];
+}
+
+/** Les anotacions que l'entrenador va escriure aquell dia. */
+export async function diariDelDia(usuari, data) {
+  if (!hiHaSupabase) return [];
+  const { data: files } = await supabase.from('diari').select('*')
+    .eq('usuari', usuari)
+    .gte('creat_el', `${data}T00:00:00`)
+    .lte('creat_el', `${data}T23:59:59`)
+    .order('creat_el', { ascending: true });
+  return files ?? [];
+}
+
+/**
+ * L'historial d'anàlisis, del més recent cap enrere.
+ * Això ja està desat: llegir-ho no costa ni un cèntim d'API.
+ */
+export async function historialAnalisis(usuari, limit = 60) {
+  if (!hiHaSupabase) return [];
+  const { data } = await supabase.from('analisis')
+    .select('id, data_sessio, veredicte, text, creat_el')
+    .eq('usuari', usuari).order('data_sessio', { ascending: false }).limit(limit);
+  return data ?? [];
+}
+
 export async function diariRecent(usuari, limit = 10) {
   if (!hiHaSupabase) return [];
   const { data } = await supabase.from('diari').select('*')
@@ -109,13 +164,57 @@ export async function responPregunta(id, resposta) {
   return !error;
 }
 
-/** Puja o actualitza la sessió del dia abans de demanar-ne l'anàlisi. */
+/**
+ * Desa una sessió. Ara se'n poden fer més d'una el mateix dia: piscina
+ * al matí i pesos a la tarda ja no es trepitgen.
+ *
+ * Si ve d'un fitxer FIT, primer treu qualsevol sessió del mateix dia
+ * que vingui del mateix fitxer, perquè tornar a pujar el mateix FIT no
+ * et dupliqui la sessió.
+ */
 export async function guardaSessio(usuari, { data, prova, previst, realitzat, notes, fitxer_fit }) {
   if (!hiHaSupabase) return false;
-  const { error } = await supabase.from('sessions').upsert({
+
+  if (fitxer_fit) {
+    await supabase.from('sessions').delete()
+      .eq('usuari', usuari).eq('data', data).eq('fitxer_fit', fitxer_fit);
+  }
+
+  const { error } = await supabase.from('sessions').insert({
     usuari, data, prova, previst, realitzat, notes, fitxer_fit,
     completada: true,
     actualitzat_el: new Date().toISOString(),
-  }, { onConflict: 'usuari,data' });
+  });
+  return !error;
+}
+
+// ---------------------------------------------------------------------
+// Excepcions al pla
+//
+// El calendari es calcula a partir de la data. Aqui nomes s'hi guarda
+// el que se n'aparta, de manera que un dia sense fila segueix anant com
+// sempre i "tornar al pla" es simplement esborrar la fila.
+// ---------------------------------------------------------------------
+
+export async function excepcionsPla(usuari, desde, fins) {
+  if (!hiHaSupabase) return {};
+  const { data } = await supabase.from('pla_excepcions').select('*')
+    .eq('usuari', usuari).gte('data', desde).lte('data', fins);
+  const per = {};
+  for (const e of data ?? []) per[e.data] = e;
+  return per;
+}
+
+export async function desaExcepcio(usuari, data, { estat, prova = null, wod = null, origen = null }) {
+  if (!hiHaSupabase) return false;
+  const { error } = await supabase.from('pla_excepcions')
+    .upsert({ usuari, data, estat, prova, wod, origen }, { onConflict: 'usuari,data' });
+  return !error;
+}
+
+export async function esborraExcepcio(usuari, data) {
+  if (!hiHaSupabase) return false;
+  const { error } = await supabase.from('pla_excepcions').delete()
+    .eq('usuari', usuari).eq('data', data);
   return !error;
 }

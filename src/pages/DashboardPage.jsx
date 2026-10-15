@@ -1,10 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePlanStore } from '../store/planStore.js';
 import { PROVES, MATERIAL } from '../data/agentRuralExercises.js';
 import {
   avui, nomDelDia, NOM_FASE, resumDeMinims, setmanesFinsLesProves,
 } from '../data/wodProgram.js';
 import BarraLlindar from '../components/BarraLlindar.jsx';
+import DetallDia from '../components/DetallDia.jsx';
+import { analisiDelDia } from '../services/coach.js';
+
+const VEREDICTE = {
+  compleix:    { text: 'Compleix',          color: 'var(--color-pine)' },
+  parcial:     { text: 'Compleix a mitges', color: 'var(--color-cursa)' },
+  no_compleix: { text: 'No compleix',       color: 'var(--color-falta)' },
+};
 
 const TO = {
   cursa: 'var(--color-cursa)',
@@ -35,8 +43,11 @@ function dataLlarga(iso) {
 
 export default function DashboardPage({ onVesA }) {
   const { carrega, avuiResolt, marques, connectat, carregant } = usePlanStore();
+  const [analisi, setAnalisi] = useState(null);
+  const [obert, setObert] = useState(false);
 
   useEffect(() => { carrega(); }, [carrega]);
+  useEffect(() => { analisiDelDia('alex', avui()).then(setAnalisi); }, []);
 
   const dia = avuiResolt();
   const resum = resumDeMinims(marques);
@@ -72,9 +83,7 @@ export default function DashboardPage({ onVesA }) {
           {dia?.ajustat && (
             <span className="ml-auto text-[12px] text-ink-faint">ajustat per l'entrenador</span>
           )}
-          {dia?.completada && (
-            <span className="ml-auto text-[12px] text-pine">feta</span>
-          )}
+
         </div>
 
         <div className="px-5 pb-1 pt-2">
@@ -121,6 +130,32 @@ export default function DashboardPage({ onVesA }) {
               </p>
             ))}
           </div>
+        )}
+
+        {/* Si la sessió ja està feta, això és el que vol veure en obrir
+            l'app: com ha anat, no què toca. */}
+        {dia?.completada && (
+          <button
+            onClick={() => setObert(true)}
+            className="flex w-full items-center gap-3 border-t border-filet px-5 py-4 text-left transition-colors hover:bg-paper"
+            style={{ backgroundColor: 'var(--color-pine-soft)' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="shrink-0">
+              <circle cx="10" cy="10" r="8.25" stroke="var(--color-pine)" strokeWidth="1.5" />
+              <path d="M6.25 10.25l2.5 2.5 5-5.5" stroke="var(--color-pine)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-pine">Sessió feta</span>
+              <span className="block text-[13px] text-pine/80">
+                {analisi
+                  ? `${VEREDICTE[analisi.veredicte]?.text ?? ''} · toca per veure l'anàlisi`
+                  : "Toca per veure el detall"}
+              </span>
+            </span>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="shrink-0">
+              <path d="M7.5 4l6 6-6 6" stroke="var(--color-pine)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         )}
 
         <div className="flex flex-col gap-2 border-t border-filet px-5 py-4 sm:flex-row">
@@ -179,6 +214,8 @@ export default function DashboardPage({ onVesA }) {
           </ul>
         </section>
       )}
+
+      {obert && <DetallDia data={avui()} onTanca={() => setObert(false)} />}
 
       <footer className="mt-9 border-t border-filet pt-5">
         <p className="xifra text-[13px] text-ink-soft">
