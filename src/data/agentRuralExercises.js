@@ -473,7 +473,7 @@ export const WODS = [
       { tipus: "sauna", text: "20 min a 80 °C", detall: "" },
     ],
     punts: [
-      "Amb els dos assaigs de castells de la setmana, aquest dia no te'l salts.",
+      "És l'únic dia de descans de la setmana. No te'l saltis ni el facis fort.",
     ],
   },
 ];

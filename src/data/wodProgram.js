@@ -25,21 +25,25 @@ export const MARQUES_INICIALS = {
 };
 
 /**
- * Repartiment setmanal. Cinc dies d'entrenament i dos d'assaig de
- * castells, que ja son carrega.
+ * Repartiment setmanal. Sis dies de feina i un de descans.
  *
- * La navette surt dos cops perque es on tens el forat mes gran: Sector
- * 6 contra un minim de 9. La piscina ja la passes, aixi que te una
- * sessio propia i apareix com a bloc final de les altres.
+ * La navette i el press banca surten dos cops cadascun: son els dos
+ * forats grossos, Sector 6 contra un minim de 9 i 22 repeticions
+ * contra 28. La piscina ja la passes, aixi que fa de dia suau entre
+ * dues sessions dures i segueix sortint com a bloc final de les altres.
+ *
+ * Els assaigs de castells s'han acabat. Si hi tornes, posa
+ * { castells: true } al dia que toqui i el pla no et demanara res mes
+ * aquell dia.
  */
 export const SETMANA = {
   1: { prova: 'navette' },
-  2: { castells: true },
-  3: { prova: 'press_banca' },
-  4: { prova: 'piscina' },
-  5: { castells: true },
+  2: { prova: 'press_banca' },
+  3: { prova: 'piscina' },
+  4: { prova: 'navette' },
+  5: { prova: 'press_banca' },
   6: { prova: 'circuit_agilitat' },
-  0: { prova: 'navette', alterna: 'press_banca' },
+  0: { descans: true },
 };
 
 const DIES = ['Diumenge', 'Dilluns', 'Dimarts', 'Dimecres', 'Dijous', 'Divendres', 'Dissabte'];
@@ -125,8 +129,8 @@ export function setmanesFinsAlTeoric(iso = avui()) {
 /**
  * Que toca el dia `iso`.
  * @returns {{data: string, dia: string, diaCurt: string, setmana: number,
- *            fase: string, castells: boolean, prova: string|null,
- *            wod: object|null, sauna: object|null}}
+ *            fase: string, castells: boolean, descans: boolean,
+ *            prova: string|null, wod: object|null, sauna: object|null}}
  */
 export function getWODForDate(iso) {
   const setmana = setmanaDelPrograma(iso);
@@ -140,12 +144,13 @@ export function getWODForDate(iso) {
     setmana,
     fase,
     castells: Boolean(plantilla.castells),
+    descans: Boolean(plantilla.descans),
     prova: null,
     wod: null,
     sauna: null,
   };
 
-  if (plantilla.castells) {
+  if (plantilla.castells || plantilla.descans) {
     return { ...base, wod: wodDe(null, 'qualsevol') };
   }
 

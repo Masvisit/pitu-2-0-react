@@ -78,7 +78,11 @@ export default function DashboardPage({ onVesA }) {
         <div className="flex items-center gap-2.5 px-5 pt-5">
           <span className="h-4 w-1 rounded-full" style={{ backgroundColor: to }} />
           <span className="text-[14px] font-semibold" style={{ color: to }}>
-            {dia?.castells ? 'Assaig de castells' : (prova?.nom ?? 'Dia lliure')}
+            {dia?.castells
+              ? 'Assaig de castells'
+              : dia?.descans
+                ? 'Descans'
+                : (prova?.nom ?? 'Dia lliure')}
           </span>
           {dia?.ajustat && (
             <span className="ml-auto text-[12px] text-ink-faint">ajustat per l'entrenador</span>

@@ -101,7 +101,13 @@ export default function CalendarPage() {
 
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14.5px] font-semibold lg:whitespace-normal">
-                    {d.tret ? 'Tret del pla' : d.castells ? 'Castells' : (prova?.curt ?? 'Lliure')}
+                    {d.tret
+                      ? 'Tret del pla'
+                      : d.castells
+                        ? 'Castells'
+                        : d.descans
+                          ? 'Descans'
+                          : (prova?.curt ?? 'Lliure')}
                     {d.mogut_de && <span className="ml-1.5 text-[12px] font-normal text-ink-faint">mogut</span>}
                   </span>
                   <span className="block truncate text-[13px] text-ink-soft lg:whitespace-normal">
@@ -233,10 +239,9 @@ export default function CalendarPage() {
       {detall && <DetallDia data={detall} onTanca={() => setDetall(null)} />}
 
       <p className="mt-4 max-w-[62ch] text-[13px] leading-relaxed text-ink-faint">
-        Dimarts i divendres són els assaigs de castells, així que aquests dies
-        el pla no et demana res més. Toca un dia per veure'n les sèries, moure'l
-        a un altre dia o treure'l. Si el mous a un dia que ja té feina, se les
-        intercanvia.
+        Diumenge és el dia de descans i no et demana res. Toca un dia per
+        veure'n les sèries, moure'l a un altre dia o treure'l. Si el mous a un
+        dia que ja té feina, se les intercanvia.
       </p>
     </div>
   );

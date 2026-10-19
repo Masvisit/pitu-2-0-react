@@ -57,7 +57,11 @@ export default function DetallDia({ data, onTanca }) {
           <div className="min-w-0 flex-1">
             <h2 className="text-[19px] font-bold leading-tight">{dataLlarga(data)}</h2>
             <p className="mt-0.5 text-[13px] text-ink-soft">
-              {previst.castells ? 'Assaig de castells' : (previst.prova ? PROVES[previst.prova].nom : 'Dia lliure')}
+              {previst.castells
+                ? 'Assaig de castells'
+                : previst.descans
+                  ? 'Descans'
+                  : (previst.prova ? PROVES[previst.prova].nom : 'Dia lliure')}
             </p>
           </div>
           {v && (

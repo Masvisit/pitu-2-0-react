@@ -385,8 +385,8 @@ export default function IACoachPage() {
           </label>
           <p className="mt-1 max-w-[58ch] text-[13px] leading-relaxed text-ink-soft">
             {mode === 'manual'
-              ? "Escriu-ho tal com ho apuntaries en paper. Exercici, sèries, repeticions i pes. I al final, com t'has trobat: energia, dolors, si anaves cansat dels castells."
-              : "Energia, dolors, hores de son, si anaves cansat dels castells. Això canvia la lectura més que les xifres."}
+              ? "Escriu-ho tal com ho apuntaries en paper. Exercici, sèries, repeticions i pes. I al final, com t'has trobat: energia, dolors, si arrossegaves cansament."
+              : "Energia, dolors, hores de son, si arrossegaves cansament. Això canvia la lectura més que les xifres."}
           </p>
           <textarea
             id="notes"

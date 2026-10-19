@@ -75,7 +75,10 @@ export function formataEstat(d: Dades): string {
   b.push('## Perfil');
   if (p) {
     b.push(`${p.edat} anys, FC màx ${p.fc_maxima ?? '?'}, piscina de ${p.piscina_metres ?? 25} m.`);
-    b.push(`Entrena: ${(p.dies_disponibles ?? []).join(' ')}. Castells: ${(p.dies_castells ?? []).join(' ')}.`);
+    b.push(`Entrena: ${(p.dies_disponibles ?? []).join(' ')}.`);
+    if ((p.dies_castells ?? []).length > 0) {
+      b.push(`Assaigs de castells: ${p.dies_castells.join(' ')}.`);
+    }
     b.push(`Proves físiques: ${p.data_examen_2 ?? '?'}. Fase actual: ${p.fase_actual ?? 'base'}.`);
   } else {
     b.push('(sense perfil desat)');

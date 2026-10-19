@@ -20,8 +20,8 @@ create table if not exists perfil (
   fc_maxima         int,
   fc_repos          int,
   piscina_metres    int     default 25,
-  dies_disponibles  text[]  default array['dl','dc','dj','ds','dg'],
-  dies_castells     text[]  default array['dm','dv'],
+  dies_disponibles  text[]  default array['dl','dm','dc','dj','dv','ds'],
+  dies_castells     text[]  default array[]::text[],
   material          text[]  default array[]::text[],
   -- objectiu
   data_examen_1     date,
